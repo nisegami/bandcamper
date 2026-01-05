@@ -69,12 +69,14 @@ class Bandcamper:
         *urls,
         fallback=True,
         force_https=True,
+        skip_existing=False,
         screamer=None,
         requester=None,
     ):
         self.urls = set()
         self.fallback = fallback
         self.force_https = force_https
+        self.skip_existing = skip_existing
         self.formatter = FilenameFormatter()
         self.screamer = screamer or Screamer()
         self.requester = requester or Requester()
@@ -314,6 +316,35 @@ class Bandcamper:
             title = None
         else:
             album = music_data.get("album_title", "")
+
+        # Check if we should skip this download
+        if self.skip_existing:
+            # Construct the expected album directory path
+            context = {
+                "artist": artist,
+                "album": album,
+                "year": year,
+                "track": "",
+                "track_num": 1,
+                "ext": "tmp",
+            }
+            # Format the output path to get the expected directory
+            test_path = self._sanitize_file_path(
+                destination / self.formatter.format(output, **context)
+            )
+            album_dir = test_path.parent
+
+            # Check if the album directory exists and has audio files
+            if album_dir.exists():
+                audio_extensions = {".mp3", ".flac", ".wav", ".aiff", ".m4a", ".ogg"}
+                has_audio_files = any(
+                    f.suffix.lower() in audio_extensions for f in album_dir.iterdir() if f.is_file()
+                )
+                if has_audio_files:
+                    self.screamer.info(
+                        f"Skipping {artist} - {title} (already exists at {album_dir})"
+                    )
+                    return
 
         if music_data.get("freeDownloadPage"):
             self.screamer.success(f"Free download found! {downloading_str}")
